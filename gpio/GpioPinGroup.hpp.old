@@ -1,0 +1,184 @@
+/*-
+ * $Copyright$
+-*/
+
+#ifndef _GPIO_PIN_GROUP_HPP_af814f03_f5a4_402d_bc18_ba4be8f29d2d
+#define _GPIO_PIN_GROUP_HPP_af814f03_f5a4_402d_bc18_ba4be8f29d2d
+
+#include <stddef.h>
+#include <stdint.h>
+
+#include <gpio/GpioPin.hpp>
+#include <gpio/GpioEngine.hpp>
+
+namespace gpio {
+
+/*******************************************************************************
+ *
+ ******************************************************************************/
+class PinGroup {
+public:
+    PinGroup(const uint8_t p_group) : m_group(p_group) {
+        
+    }
+
+    virtual ~PinGroup() {
+        
+    }
+
+protected:
+    const uint8_t m_group;
+};
+
+
+/*******************************************************************************
+ *
+ ******************************************************************************/
+#if !defined(DOXYGEN)
+/*
+ * Template Meta-Programming Example from Wikibooks, via URL below on July 13th, 2013:
+ *   http://en.wikibooks.org/wiki/C%2B%2B_Programming/Templates/Template_Meta-Programming#Example:_Compile-time_.22If.22
+ *
+ * This code is used to determine the width of the parameters to the write() and
+ * read() methods below.
+ */
+namespace Group {
+    template <bool Condition, typename TrueResult, typename FalseResult>
+    struct if_;
+
+    template <typename TrueResult, typename FalseResult>
+    struct if_<true, TrueResult, FalseResult>
+    {
+      typedef TrueResult m_result;
+    };
+
+    template <typename TrueResult, typename FalseResult>
+    struct if_<false, TrueResult, FalseResult>
+    {
+      typedef FalseResult m_result;
+    };
+
+    template<typename T> struct VectorChoiceT {
+        typedef typename if_<(T::m_width > sizeof(uint8_t) * 8),
+            typename if_<(T::m_width > sizeof(uint16_t) * 8),
+              typename if_<(T::m_width > sizeof(uint32_t) * 8),
+                typename if_<(T::m_width > sizeof(uint64_t) * 8), uint8_t[], uint64_t>::m_result,
+              uint32_t>::m_result,
+            uint16_t>::m_result,
+          uint8_t>::m_result vector_t;
+    };
+
+    template<> struct VectorChoiceT<void> {
+        typedef unsigned vector_t;
+    };
+    
+    template<typename T> struct EngineWidthChoiceT {
+        static const size_t m_width = T::m_width;
+    };
+    template<> struct EngineWidthChoiceT<void> {
+        static const size_t m_width = sizeof(unsigned);
+    };
+    
+} /* namespace Group */
+
+#endif /* !defined(DOXYGEN) */
+
+/*******************************************************************************
+ *
+ ******************************************************************************/
+template<unsigned t_nGroups, typename EngineT = gpio::GpioEngine>
+class GroupT : public PinGroup {
+public:
+    GroupT(const uint8_t p_group) : m_group(p_group) {
+        
+    }
+
+    virtual ~GroupT() {
+        
+    }
+
+#if defined(DOXYGEN)
+    typedef unsigned vector_t;
+#else
+    typedef typename Group::VectorChoiceT<EngineT>::vector_t vector_t;
+#endif /* defined(DOXYGEN) */
+
+    int set(const vector_t p_mode) const;
+    int get(vector_t &p_mode) const;
+
+protected:
+    static const size_t m_width = Group::EngineWidthChoiceT<EngineT>::m_width;
+
+    const uint8_t m_group;
+};
+
+} /* namespace gpio */
+
+/*******************************************************************************
+ *
+ ******************************************************************************/
+#if defined(GMOCK_FOUND) && defined(DEBUG_BUILD)
+
+#include <gmock/gmock.h>
+#include <ostream>
+
+namespace gpio {
+class GpioPinGroupMock : public Pin {
+private:
+    std::string m_name;
+    std::ostream * const m_ostream;
+
+    mutable mode_t m_termination;
+    mutable mode_t m_value;
+
+public:
+    GpioPinGroupMock(std::ostream * const p_ostream = NULL, const std::string &p_name = "Default", mode_t p_termination = HiZ)
+      : Pin(-1), m_name(p_name), m_ostream(p_ostream), m_termination(p_termination), m_value(HiZ) {
+    }
+
+    int set(const mode_t p_mode) const {
+        volatile bool change = false;
+
+        if (p_mode == HiZ) {
+            change = m_value != m_termination;
+            m_value = m_termination;
+        } else {
+            change = m_value != p_mode;
+            m_value = p_mode;
+        }
+
+        if (m_ostream != NULL) {
+            *m_ostream << "Set " << m_name << " => " << (m_value == Off ? "L" : (m_value == On ? "H" : "Z" ));
+            if (change) {
+                *m_ostream << " Change!";
+            }
+            *m_ostream << std::endl;
+        }
+        return this->_set(p_mode);
+    }
+    MOCK_CONST_METHOD1(_set, int(const mode_t p_mode));
+
+    int get(mode_t &p_mode) const {
+        int rc = this->_get(p_mode);
+
+#if 0
+        change = p_mode != m_value;
+        m_value = p_mode;
+
+        if (m_ostream != NULL) {
+            *m_ostream << "Get " << m_name << " => " << (m_value == Off ? "L" : (m_value == On ? "H" : "Z" ));
+            if (change) {
+                *m_ostream << " Change!";
+            }
+            *m_ostream << std::endl;
+        }
+#endif
+
+        return rc;
+    }
+    MOCK_CONST_METHOD1(_get, int(mode_t &p_mode));
+}; /* GpioPinMock */
+
+} /* namespace gpio */
+#endif /* defined(GMOCK_FOUND) && defined(DEBUG_BUILD) */
+#endif /* _GPIO_PIN_GROUP_HPP_af814f03_f5a4_402d_bc18_ba4be8f29d2d */
